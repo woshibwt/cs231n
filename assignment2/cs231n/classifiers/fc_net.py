@@ -207,7 +207,15 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        layers_dims = np.hstack([input_dim, hidden_dims, num_classes])
+        for i in range(self.num_layers):
+          self.params['W' + str(i+1)] = weight_scale*np.random.randn(layers_dims[i], layers_dims[i+1])
+          self.params['b' + str(i+1)] = np.zeros(layers_dims[i+1])
+
+        if self.normalization != None:
+          for i in range(self.num_layers - 1):
+            self.params['gamma' + str(i+1)] = np.ones(layers_dims[i+1])
+            self.params['beta' +  str(i+1)] = np.zeros(layers_dims[i+1])
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -269,7 +277,9 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        x = X
+        caches = []
+        gamma, beta, bn_pa
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
