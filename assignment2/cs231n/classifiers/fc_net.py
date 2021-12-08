@@ -279,7 +279,21 @@ class FullyConnectedNet(object):
 
         x = X
         caches = []
-        gamma, beta, bn_pa
+        gamma, beta, bn_pa = None, None, None
+        for i in range(self.num_layers - 1):
+          w = self.params['W'+str(i+1)]
+          b = self.params['b'+str(i+1)]
+          if self.normalization != None:
+            gamma = self.params['gamma' + str(i+1)]
+            beta  = self.params['beta'  + str(i+1)]
+            bn_param = self.bn_params[i]
+          x, cache = affine_norm_relu_forward(x,w,b, gamma, beta)
+
+          caches.append(cache)
+        w = self.params['W'+str(self.num_layers)]
+        b = self.params['b'+str(self.num_layers)]
+        scores, cache = affine_forward(x, w, b)
+        caches.append(cache)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -314,3 +328,18 @@ class FullyConnectedNet(object):
         ############################################################################
 
         return loss, grads
+def affine_norm_relu_forward(x, w, b, gamma, beta, bn_param, normalization, dropout, do_param):
+  bn_cache, do_cache = None, None
+  # affine layer
+  out, fc_cache = affine_forward(x, w ,b)
+  # batch/layer norm
+  if normalization == 'batchnorm':
+    out, bn_cache = batchnorm_forward(out, gamma, beta, bn_param)
+  elif normalization == 'layernorm':
+    out, bn_cache = layernorm_forward(out, gamma, beta, bn_param)
+  # relu
+  out, relu_cache = relu_forward(out)
+  # dropout
+  if dropout:
+    out, do_cache = dropout_forward(out, do_param)
+  return out, (fc_cache, bn_cache, relu_cache, do_cache)
