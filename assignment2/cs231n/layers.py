@@ -275,7 +275,24 @@ def batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    dbeta = dout.sum(axis=cache['axis'])
+    dgamma = np.sum(dout * cache['z'], axis=cache['axis'])
+    
+    N = 1.0 * dout.shape[0]
+    dfdz = dout * cache['gamma']
+    dudx = 1/N
+    dvdx = 2/N * (cache['x'] - cache['mean'])
+    dzdx = 1 / cache['std']
+    dzdu = -1 / cache['std']
+    dzdv= -0.5 * (cache['var'] ** -1.5)* (cache['x'] - cache['mean'])
+    dvdu = -2/N * np.sum(cache['x'] - cache['mean'], axis=0)        #[1xD]
+
+    dx = dfdz*dzdx + np.sum(dfdz*dzdu,axis=0)*dudx + \
+         np.sum(dfdz*dzdv,axis=0)*(dvdx+dvdu*dudx)
+    # y_i: f 
+    # x_hat: z
+    # mean: v
+    # sigma: u 
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -310,7 +327,15 @@ def batchnorm_backward_alt(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    dbeta = dout.sum(axis=cache['axis'])
+    dgamma = np.sum(dout * cache['z'], axis=cache['axis'])
+
+    N = dout.shape[0]
+    z = cache['z']
+    dfdz = dout * cache['gamma']                                    #[NxD]
+    dfdz_sum = np.sum(dfdz,axis=0)                                  #[1xD]
+    dx = dfdz - dfdz_sum/N - np.sum(dfdz * z,axis=0) * z/N          #[NxD]
+    dx /= cache['std']
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -356,7 +381,13 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    ln_param['mode'] = 'train' # same as batch norm in train mode
+    ln_param['layernorm'] = 1
+    # transpose x, gamma and beta
+    out, cache = batchnorm_forward(x.T, gamma.reshape(-1,1),
+                                   beta.reshape(-1,1), ln_param)
+    # transpose output to get original dims
+    out = out.T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -391,7 +422,8 @@ def layernorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    dx, dgamma, dbeta = batchnorm_backward_alt(dout.T, cache)
+    dx = dx.T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
