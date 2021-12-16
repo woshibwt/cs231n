@@ -561,8 +561,36 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    padding = conv_param['pad']
+    stride = conv_param['stride']
+    N, C, H, W = x.shape
+    F, C, FH, FW = w.shape
 
+    assert(H - FH + 2 * padding) % stride == 0
+    assert(W - FW + 2 * padding) % stride == 0
 
+    outH = 1 + (H - FH + 2 * padding) // stride
+    outW = 1 + (W - FW + 2 * padding) // stride
+
+    # 定义输出Tensor的维度
+    out = np.zeros(shape=(N, F, outH, outW))
+
+    # 给input data 加上padding
+    x_pad = np.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
+    H_pad, W_pad = x_pad.shape[2], x_pad.shape[3]
+
+    # create w_row matrix
+    w_row = w.reshape(F, C*FH*FW)
+
+    # create x_col matrix with values that each neuron is connected to
+    x_col = np.zeros((C*FH*FW, outH*outW))
+    for index in range(N):
+      neuron = 0
+      for i in range(0, H_pad - FH + 1, stride):
+        for j in range(0, W_pad - FW + 1, stride):
+          x_col[:, neuron] = x_pad[index,:, i:i+FH,j:j+FW].reshape(C*FH*FW)
+          neuron += 1
+      out[index] = (w_row.dot(x_col) + b.reshape(F,1)).reshape(F, outH, outW)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -591,7 +619,70 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # x_pad, w, b, conv_param = cache
+    # N, F, outH, outW = dout.shape
+    # N, C, Hpad, Wpad = x_pad.shape
+    # FH, FW = w.shape[2], w.shape[3]
+    # stride = conv_param['stride']
+    # padding = conv_param['pad']
+
+    # # 初始化梯度
+    # dx = np.zeros((N, C, Hpad - 2 * padding, Wpad - 2 * padding))
+    # dw, db = np.zeros(w.shape), np.zeros(b.shape)
+
+    # # 创建 w_row 矩阵
+    # w_row = w.reshape(F, C*FH*FW)
+
+    # # create x_col matrix with values that each neuron is connected to
+    # x_col = np.zeros((C*FH*FW, outH*outW))
+
+    # for index in range(N):
+    #   out_col = dout[index].reshape(F, outH*outW)
+    #   w_out = w_row.T.dot(out_col)
+    #   dx_cur = np.zeros((C, Hpad, Wpad))
+    #   neuron = 0
+    #   for i in range(0, Hpad - FH + 1, stride):
+    #     for j in range(0, Wpad- FW + 1, stride):
+    #       dx_cur[:, i:i+FH,j:j+FW] += w_out[:,neuron].reshape(C, FH, FW)
+    #       x_col[:, neuron] = x_pad[index, :, i:i+FH, j:j+FW].reshape(C*FH*FW)
+    #       neuron += 1
+    #   dx[index] = dx_cur[:, padding:-padding,padding:-padding]
+    #   dw += out_col.dot(x_col.T).reshape(F, C, FH, FW)
+    #   db += out_col.sum(axis=1)
+
+    # extract params 
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    stride = conv_param.get('stride', 1)
+    pad = conv_param.get('pad', 0)
+
+    # pad H and W axes of the input data, 0 is the default constant for np.pad
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant')
+
+    # output volume size
+    # note that the // division yields an int (while / yields a float)
+    Hout = (H + 2 * pad - HH) // stride + 1 
+    Wout = (W + 2 * pad - WW) // stride + 1
+
+    # construct output
+    dx_pad = np.zeros_like(x_pad)
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    
+    # naive Loops
+    for n in range(N): # for each neuron
+        for f in range(F): # for each filter/kernel
+            db[f] += dout[n, f].sum() # one bias/filter
+            for i in range(0, Hout): # for each y activation
+                for j in range(0, Wout): # for each x activation
+                    dw[f] += x_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * dout[n, f, i, j]
+                    dx_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] += w[f] * dout[n, f, i, j]
+    
+    # extract dx from dx_pad since dx.shape needs to match x.shape
+    dx = dx_pad[:, :, pad:pad+H, pad:pad+W]
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -625,7 +716,24 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    stride = pool_param['stride']
+    PH = pool_param['pool_height']
+    PW = pool_param['pool_width']
+    outH = 1 + (H - PH) // stride
+    outW = 1 + (W - PW) // stride
+
+    # create output tensor for pooling layer
+    out = np.zeros((N, C, outH, outW))
+    for index in range(N):
+        out_col = np.zeros((C, outH*outW))
+        neuron = 0
+        for i in range(0, H - PH + 1, stride):
+            for j in range(0, W - PW + 1, stride):
+                pool_region = x[index,:,i:i+PH,j:j+PW].reshape(C,PH*PW)
+                out_col[:,neuron] = pool_region.max(axis=1)
+                neuron += 1
+        out[index] = out_col.reshape(C, outH, outW)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -652,7 +760,28 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, pool_param = cache
+    N, C, outH, outW = dout.shape
+    H, W = x.shape[2], x.shape[3]
+    stride = pool_param['stride']
+    PH, PW = pool_param['pool_height'], pool_param['pool_width']
+
+    # initialize gradient
+    dx = np.zeros(x.shape)
+    
+    for index in range(N):
+        dout_row = dout[index].reshape(C, outH*outW)
+        neuron = 0
+        for i in range(0, H-PH+1, stride):
+            for j in range(0, W-PW+1, stride):
+                pool_region = x[index,:,i:i+PH,j:j+PW].reshape(C,PH*PW)
+                max_pool_indices = pool_region.argmax(axis=1)
+                dout_cur = dout_row[:,neuron]
+                neuron += 1
+                # pass gradient only through indices of max pool
+                dmax_pool = np.zeros(pool_region.shape)
+                dmax_pool[np.arange(C),max_pool_indices] = dout_cur
+                dx[index,:,i:i+PH,j:j+PW] += dmax_pool.reshape(C,PH,PW)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -694,7 +823,10 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    x = x.transpose(0,2,3,1).reshape(N*H*W, C)
+    out, cache = batchnorm_forward(x, gamma, beta, bn_param)
+    out = out.reshape(N, H, W, C).transpose(0,3,1,2)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -728,7 +860,10 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = dout.shape
+    dout = dout.transpose(0,2,3,1).reshape(N*H*W, C)
+    dx, dgamma, dbeta = batchnorm_backward_alt(dout, cache)
+    dx = dx.reshape(N, H, W, C).transpose(0,3,1,2)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -768,7 +903,20 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    size = (N*G, C//G *H*W)
+    x = x.reshape(size).T
+    gamma = gamma.reshape(1, C, 1, 1)
+    beta = beta.reshape(1, C, 1, 1)
+    # similar to batch normalization
+    mu = x.mean(axis=0)
+    var = x.var(axis=0) + eps
+    std = np.sqrt(var)
+    z = (x - mu)/std
+    z = z.T.reshape(N, C, H, W)
+    out = gamma * z + beta
+    # save values for backward call
+    cache={'std':std, 'gamma':gamma, 'z':z, 'size':size}
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -798,7 +946,21 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = dout.shape
+    size = cache['size']
+    dbeta = dout.sum(axis=(0,2,3), keepdims=True)
+    dgamma = np.sum(dout * cache['z'], axis=(0,2,3), keepdims=True)
+
+    # reshape tensors
+    z = cache['z'].reshape(size).T
+    M = z.shape[0]
+    dfdz = dout * cache['gamma']
+    dfdz = dfdz.reshape(size).T
+    # copy from batch normalization backward alt
+    dfdz_sum = np.sum(dfdz,axis=0)
+    dx = dfdz - dfdz_sum/M - np.sum(dfdz * z,axis=0) * z/M
+    dx /= cache['std']
+    dx = dx.T.reshape(N, C, H, W)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
